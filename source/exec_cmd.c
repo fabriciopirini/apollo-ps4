@@ -18,6 +18,8 @@
 
 static char host_buf[256];
 
+static void copySavePFS(const save_entry_t* save);
+
 static void _set_dest_path(char* path, int dest, const char* folder)
 {
 	switch (dest)
@@ -252,11 +254,31 @@ static void copyAllSavesHDD(const save_entry_t* save, int all)
 	init_progress_bar("Copying all saves...");
 
 	LOG("Copying all saves from '%s' to HDD...", save->path);
+
 	for (node = list_head(list); (item = list_get(node)); node = list_next(node))
 	{
 		update_progress_bar(progress++, list_count(list), item->name);
-		if (item->type == FILE_TYPE_PS4 && !(item->flags & SAVE_FLAG_LOCKED) && (all || item->flags & SAVE_FLAG_SELECTED))
-			err_count += ! _copy_save_hdd(item);
+
+		/*
+		 * Previous code only handled unencrypted (unlocked) saves
+		 * with _copy_save_hdd. Now we also want to automatically
+		 * handle locked (encrypted) saves by reusing the
+		 * copySavePFS() method "as is" (which handles decryption).
+		 */
+		if (item->type == FILE_TYPE_PS4 && (all || (item->flags & SAVE_FLAG_SELECTED)))
+		{
+			if (item->flags & SAVE_FLAG_LOCKED)
+			{
+				// Handle locked (encrypted) saves by reusing the PFS copy method.
+				// This function copies + decrypts them internally.
+				copySavePFS(item);
+			}
+			else
+			{
+				// Unlocked saves are still handled by the original method.
+				err_count += ! _copy_save_hdd(item);
+			}
+		}
 	}
 
 	end_progress_bar();
